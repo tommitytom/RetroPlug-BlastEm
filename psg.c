@@ -225,6 +225,11 @@ void psg_deserialize(deserialize_buffer *buf, void *vcontext)
 	load_buffer16(buf, context->counter_load, 4);
 	load_buffer16(buf, context->counters, 4);
 	load_buffer8(buf, context->volume, 4);
+	/* RetroPlug: psg_run indexes volume_table with each of these, and a state's byte is a user file's: mask it to the
+	 * register's four bits, the value psg_write produces. */
+	for (int i = 0; i < 4; i++) {
+		context->volume[i] &= 0xF;
+	}
 	uint8_t output_state = load_int8(buf);
 	context->output_state[0] = output_state >> 3 & 1;
 	context->output_state[1] = output_state >> 2 & 1;

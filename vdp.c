@@ -6676,6 +6676,21 @@ void vdp_deserialize(deserialize_buffer *buf, void *vcontext)
 	context->sprite_draws = load_int8(buf);
 	context->slot_counter = load_int8(buf);
 	context->cur_slot = load_int8(buf);
+	/* RetroPlug: these four are indices into the draw and info lists, which are MAX_SPRITES_LINE entries each inside
+	 * this context, and the renderer writes through them; a state out of range would write into the neighbouring
+	 * fields. Refuse it, with the ranges the renderer itself produces: sprite_index is a 7-bit frame index and the
+	 * renderer keeps it under this context's own MAX_SPRITES_FRAME, sprite_draws counts the line's draws, and the two
+	 * slots run from -1 (empty) up to the line's maximum. */
+	if (context->sprite_index >= MAX_SPRITES_FRAME ||
+		context->sprite_draws > MAX_SPRITES_LINE ||
+		context->slot_counter < -1 || context->slot_counter > MAX_SPRITES_LINE ||
+		context->cur_slot < -1 || context->cur_slot > MAX_SPRITES_LINE) {
+		warning("Save state has impossible sprite counters: index %d, draws %d, slots %d and %d\n",
+			context->sprite_index, context->sprite_draws, context->slot_counter, context->cur_slot);
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
+	}
 	if (version == 0) {
 		int cur_draw = 0;
 		for (int i = 0; i < MAX_SPRITES_LINE * 2; i++)

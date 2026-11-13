@@ -1198,14 +1198,16 @@ void ym_deserialize(deserialize_buffer *buf, void *vcontext)
 	{
 		context->channels[i].output = load_int16(buf);
 		context->channels[i].op1_old = load_int16(buf);
-		context->channels[i].block = load_int8(buf);
-		context->channels[i].fnum = load_int16(buf);
+		/* RetroPlug: block and fnum come out of a state, and both are table indices here and at run time (the keycode
+		 * selects a detune_table row). Mask them to the register's bits, the values ym_data_write produces. */
+		context->channels[i].block = load_int8(buf) & 7;
+		context->channels[i].fnum = load_int16(buf) & 0x7FF;
 		context->channels[i].keycode = context->channels[i].block << 2 | fnum_to_keycode[context->channels[i].fnum >> 7];
 		context->channels[i].keyon = load_int8(buf);
 	}
 	for (int i = 0; i < 3; i++)
 	{
-		context->ch3_supp[i].block = load_int8(buf);
+		context->ch3_supp[i].block = load_int8(buf) & 7;
 		context->ch3_supp[i].fnum = load_int8(buf);
 		context->ch3_supp[i].keycode = context->ch3_supp[i].block << 2 | fnum_to_keycode[context->ch3_supp[i].fnum >> 7];
 	}
