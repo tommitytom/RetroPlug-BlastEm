@@ -115,6 +115,10 @@ genesis_context *alloc_genesis_32x(system_media *media, uint32_t opts, uint8_t f
 genesis_context *alloc_genesis_32x_cdboot(system_media *media, uint32_t system_opts, uint8_t force_region);
 void genesis_serialize(genesis_context *gen, serialize_buffer *buf, uint32_t m68k_pc, uint8_t all);
 void genesis_deserialize(deserialize_buffer *buf, genesis_context *gen);
+/* RetroPlug: bring the YM2612 and the PSG to an absolute master clock (a 32-bit offset from cycle_base, the domain
+ * sync_components uses) without running the 68k, so a host that stops the 68k at a block end can make the block's audio
+ * before it reads it. See the definition for why the chips can trail the 68k. */
+void genesis_sync_sound(genesis_context *gen, uint32_t cycle);
 void gen_update_refresh_free_access(m68k_context *context);
 void gen_update_z80_bank_pointer(genesis_context *gen);
 

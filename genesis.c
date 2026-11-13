@@ -512,6 +512,16 @@ static void sync_sound(genesis_context * gen, uint32_t target)
 	//printf("Target: %d, YM bufferpos: %d, PSG bufferpos: %d\n", target, gen->ym->buffer_pos, gen->psg->buffer_pos * 2);
 }
 
+/* RetroPlug: run the sound chips to an absolute master clock from outside the 68k's own syncs, for a host that stops
+ * the 68k at a block end. A 68k-to-VDP DMA moves context->cycles to the DMA's end in one go, past the stop, so the last
+ * sync_components ran the chips well short of where the 68k got to; a host that then reads its block's worth of audio
+ * reads samples the chips have not made. `cycle` is the same 32-bit offset from cycle_base that sync_components passes
+ * to sync_sound. */
+void genesis_sync_sound(genesis_context * gen, uint32_t cycle)
+{
+	sync_sound(gen, cycle);
+}
+
 #define REFRESH_INTERVAL 128
 #define REFRESH_DELAY 2
 
