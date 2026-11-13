@@ -365,6 +365,8 @@ static uint16_t get_open_bus_value(system_header *system)
 {
 	genesis_context *genesis = (genesis_context *)system;
 #ifdef NEW_CORE
+	/* RetroPlug: the generated core keeps the word it prefetched, so that is the bus. The non-generated one read
+	 * through read_dma_value, which is why that call now takes the VDP. */
 	return genesis->m68k->prefetch;
 #else
 	return read_dma_value(genesis->vdp, genesis->m68k->last_prefetch_address/2);
@@ -2397,8 +2399,13 @@ static void soft_reset(system_header *system)
 {
 	genesis_context *gen = (genesis_context *)system;
 	if (gen->reset_cycle == CYCLE_NEVER) {
-		double random = (double)rand()/(double)RAND_MAX;
-		gen->reset_cycle = gen->m68k->cycles + random * MCLKS_LINE * (gen->version_reg & HZ50 ? LINES_PAL : LINES_NTSC);
+		/* RetroPlug: the delay used to come from rand(), the process-wide C library generator, so one console's reset
+		 * depended on how many draws every other console (and the host) had made and on nothing this console owns:
+		 * not "as if alone", and not reproducible. A reset's delay is a phase within the frame, and this console's own
+		 * 68k count already says where in its frame it is, so two consoles that have run the same program reset the
+		 * same way however many others exist. */
+		uint32_t frame_clocks = MCLKS_LINE * (gen->version_reg & HZ50 ? LINES_PAL : LINES_NTSC);
+		gen->reset_cycle = gen->m68k->cycles + gen->m68k->cycles % frame_clocks;
 		if (gen->reset_cycle < gen->m68k->target_cycle) {
 			gen->m68k->target_cycle = gen->reset_cycle;
 		}
@@ -2958,7 +2965,7 @@ static genesis_context *shared_init(uint32_t system_opts, rom_info *rom, uint8_t
 
 	/* RetroPlug: this console's own copy of the Z80's map (see kZ80MapTemplate), so the map init_z80_opts keeps
 	 * carries this console's zram and nothing a later console allocates can move it. */
-	gen->z80_map = malloc(sizeof(memmap_chunk) * 5);
+	gen->z80_map = malloc(sizeof(kZ80MapTemplate));
 	memcpy(gen->z80_map, kZ80MapTemplate, sizeof(kZ80MapTemplate));
 	gen->z80_map[0].buffer = gen->zram = calloc(1, Z80_RAM_BYTES);
 #ifndef NO_Z80
@@ -3020,6 +3027,9 @@ static genesis_context *shared_init_gen(rom_info info, void *lock_on, uint32_t l
 		byteswap_rom(nearest_pow2(lock_on_size), lock_on);
 	}
 #endif
+	/* RetroPlug: the `clocks\0m68k_divider\0` read that set MCLKS_PER_68K from the config tree was here. The divider is
+	 * 7 on every Mega Drive and is a compile-time constant now (genesis.c's own definition), because a writable
+	 * file-scope variable every allocation overwrote is state two consoles in one process cannot each own. */
 	genesis_context *gen = shared_init(ym_opts, &info, force_region);
 	gen->z80->mem_pointers[1] = gen->z80->mem_pointers[2] = rom;
 
@@ -3440,6 +3450,8 @@ genesis_context* alloc_config_pico(void *rom, uint32_t rom_size, void *lock_on, 
 		byteswap_rom(nearest_pow2(lock_on_size), lock_on);
 	}
 #endif
+	/* RetroPlug: the `clocks\0m68k_divider\0` read that set MCLKS_PER_68K from the config tree was here, as it was in
+	 * shared_init_gen: the divider is the constant 7 (genesis.c's own definition). */
 	genesis_context *gen = calloc(1, sizeof(genesis_context));
 	gen->header.set_speed_percent = set_speed_percent;
 	gen->header.start_context = start_genesis;
