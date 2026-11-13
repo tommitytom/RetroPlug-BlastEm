@@ -93,6 +93,13 @@ struct io_port {
 			uint8_t  port_start;
 			uint8_t  reset_state;
 		} multitap;
+		struct {
+			/* RetroPlug: the host object that drives this port when device_type is IO_CUSTOM. io_data_read hands
+			 * each read to it through this pointer, so a read belongs to the console it came from rather than to
+			 * whichever console last ran on the thread. The host sets it for its own port; the console never reads
+			 * it, and it is not part of any state. */
+			void *host;
+		} custom;
 	} device;
 	uint8_t  output;
 	uint8_t  control;
