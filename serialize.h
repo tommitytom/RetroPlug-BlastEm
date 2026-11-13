@@ -9,6 +9,9 @@ typedef struct {
 	size_t  storage;
 	size_t  current_section_start;
 	uint8_t *data;
+	/* RetroPlug: a state that could not grow is a REFUSAL a caller can see, not a partial buffer handed back as if
+	 * it were a state. save_* stop writing once this is set and the caller checks it. */
+	uint8_t failed;
 } serialize_buffer;
 
 typedef struct deserialize_buffer deserialize_buffer;
@@ -25,6 +28,9 @@ struct deserialize_buffer {
 	uint8_t         *data;
 	section_handler *handlers;
 	uint16_t        max_handler;
+	/* RetroPlug: a short read is a REFUSAL a caller can see, not an exit: a plugin handed a truncated state must
+	 * return an error. cur_pos goes to the end with it, so every later read in the same buffer refuses too. */
+	uint8_t         failed;
 };
 
 enum {

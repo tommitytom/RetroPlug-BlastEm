@@ -6621,7 +6621,12 @@ void vdp_deserialize(deserialize_buffer *buf, void *vcontext)
 	context->cd = load_int8(buf);
 	uint8_t fifo_size = load_int8(buf);
 	if (fifo_size > FIFO_SIZE) {
-		fatal_error("Invalid fifo size %d", fifo_size);
+		/* RetroPlug: was fatal_error. The size comes out of the state, so it is one more field a corrupt or foreign
+		 * state controls: refuse the state, do not end the process. */
+		warning("Invalid fifo size %d\n", fifo_size);
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
 	}
 	if (fifo_size) {
 		context->fifo_read = 0;

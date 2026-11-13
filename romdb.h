@@ -86,6 +86,9 @@ struct rom_info {
 	uint8_t       regions;
 	uint8_t       is_save_lock_on; //Does the save buffer actually belong to a lock-on cart?
 	uint8_t       wants_cd;
+	/* RetroPlug: a cart this database knows, mapped past the end of the image a user actually has (a trimmed or
+	 * overdumped copy), used to be a fatal_error. It is a refused ROM a caller can see instead. */
+	uint8_t       load_failed;
 };
 
 #define GAME_ID_OFF 0x180

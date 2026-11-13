@@ -763,6 +763,7 @@ static rom_info configure_rom_heuristics_shared(uint8_t *rom, uint32_t rom_size)
 	info.rom = rom;
 	info.rom_size = rom_size;
 	info.wants_cd = 0;
+	info.load_failed = 0; /* RetroPlug: see the field in romdb.h */
 	for (uint32_t offset = 0x190; offset < rom_size && offset < 0x1A0; offset++)
 	{
 		uint8_t invalid = 0;
@@ -1027,7 +1028,13 @@ char *map_node_common(char *key, tern_val val, uint8_t valtype, map_iter_state *
 	if (!strcmp(dtype, "ROM")) {
 		uint32_t expanded_size = nearest_pow2(state->rom_size);
 		if (offset >= expanded_size) {
-			fatal_error("offset of %X is invalid for ROM size of %X in map entry %d with addess %s\n", offset, state->rom_size, state->index, key);
+			/* RetroPlug: was fatal_error. A copy of a game the database knows that is shorter than the entry expects is
+			 * a user's file, so it refuses the ROM instead of ending the process. The chunk keeps the zeroed flags it
+			 * came with (so nothing maps there) and a buffer inside the image, so nothing can index past it either. */
+			warning("offset of %X is invalid for ROM size of %X in map entry %d with addess %s\n", offset, state->rom_size, state->index, key);
+			state->info->load_failed = 1;
+			map->buffer = state->rom;
+			return NULL;
 		}
 		map->buffer = state->rom + offset;
 		map->mask = calc_mask(nearest_pow2(state->rom_size) - offset, start, end);
@@ -1323,17 +1330,23 @@ void map_iter_fun(char *key, tern_val val, uint8_t valtype, void *data)
 		state->info->mapper_type = MAPPER_SFT_WUKONG;
 		uint32_t expanded_size = nearest_pow2(state->rom_size);
 		if (offset >= expanded_size) {
-			fatal_error("offset of %X is invalid for ROM size of %X in map entry %d with addess %s\n", offset, state->rom_size, state->index, key);
-		}
-		map->buffer = state->rom + offset;
-		map->mask = calc_mask(nearest_pow2(state->rom_size) - offset, map->start, map->end - 1);
-		map->write_8 = sft_wukong_write_b;
-		map->write_16 = sft_wukong_write_w;
-		if (!strcmp(dtype, "sft-wukong-remap")) {
-			map->flags = MMAP_READ | MMAP_CODE | MMAP_PTR_IDX;
-			state->info->mapper_start_index = state->ptr_index++;
+			/* RetroPlug: was fatal_error, for the same reason as the ROM device in map_node_common. The chunk keeps the
+			 * zeroed flags it came with (nothing maps here) and a buffer inside the image, and the entry still counts
+			 * itself at the tail so the chunks after it stay in their slots. */
+			warning("offset of %X is invalid for ROM size of %X in map entry %d with addess %s\n", offset, state->rom_size, state->index, key);
+			state->info->load_failed = 1;
+			map->buffer = state->rom;
 		} else {
-			map->flags = MMAP_READ;
+			map->buffer = state->rom + offset;
+			map->mask = calc_mask(nearest_pow2(state->rom_size) - offset, map->start, map->end - 1);
+			map->write_8 = sft_wukong_write_b;
+			map->write_16 = sft_wukong_write_w;
+			if (!strcmp(dtype, "sft-wukong-remap")) {
+				map->flags = MMAP_READ | MMAP_CODE | MMAP_PTR_IDX;
+				state->info->mapper_start_index = state->ptr_index++;
+			} else {
+				map->flags = MMAP_READ;
+			}
 		}
 	} else if (!strcmp(dtype, "radica")) {
 		state->info->mapper_type = MAPPER_RADICA;
@@ -1468,6 +1481,7 @@ static void configure_nonmap_entry(rom_info *info, tern_node *entry, uint8_t *ro
 	info->is_save_lock_on = 0;
 	info->rom = rom;
 	info->rom_size = rom_size;
+	info->load_failed = 0; /* RetroPlug: see the field in romdb.h */
 
 	handle_io_overrides(entry, info);
 	info->mouse_mode = tern_find_ptr(entry, "mouse_mode");

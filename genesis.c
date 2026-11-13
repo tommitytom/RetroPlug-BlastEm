@@ -177,7 +177,12 @@ static void ram_deserialize(deserialize_buffer *buf, void *vgen)
 	genesis_context *gen = vgen;
 	uint32_t ram_size = load_int8(buf) * 1024 / 2;
 	if (ram_size > RAM_WORDS) {
-		fatal_error("State has a RAM size of %d bytes", ram_size * 2);
+		/* RetroPlug: was fatal_error. A state that describes more work RAM than the machine has is a state this core
+		 * cannot be, so it is refused the way a short field is: latch the buffer and read nothing. */
+		warning("State has a RAM size of %d bytes\n", ram_size * 2);
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
 	}
 	load_buffer16(buf, gen->work_ram, ram_size);
 	m68k_invalidate_code_range(gen->m68k, 0xE00000, 0x1000000);
@@ -188,7 +193,11 @@ static void zram_deserialize(deserialize_buffer *buf, void *vgen)
 	genesis_context *gen = vgen;
 	uint32_t ram_size = load_int8(buf) * 1024;
 	if (ram_size > Z80_RAM_BYTES) {
-		fatal_error("State has a Z80 RAM size of %d bytes", ram_size);
+		/* RetroPlug: same as ram_deserialize: an impossible size is a refusal, not an exit. */
+		warning("State has a Z80 RAM size of %d bytes\n", ram_size);
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
 	}
 	load_buffer8(buf, gen->zram, ram_size);
 	z80_invalidate_code_range(gen->z80, 0, 0x4000);
@@ -1365,7 +1374,11 @@ static m68k_context * io_write(uint32_t location, m68k_context * context, uint8_
 					gen->z80->mem_pointers[1] = NULL;
 				}
 			} else {
-				fatal_error("68K write to unhandled Z80 address %X\n", location);
+				/* RetroPlug: was fatal_error. A cart's own program can reach this (the location comes out of the ROM's
+				 * code, not out of anything the host chose), and a host that runs a cart in a plugin cannot be allowed to
+				 * end the process. The write is dropped, which is what an unimplemented device does. */
+				warning("68K write to unhandled Z80 address %X\n", location);
+				return context;
 			}
 		}
 	} else {
