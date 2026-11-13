@@ -41,7 +41,8 @@ const char * device_type_names[] = {
 	"Sega Parallel Transfer Board",
 	"Generic Device",
 	"Generic Serial",
-	"Heartbeat Personal Trainer"
+	"Heartbeat Personal Trainer",
+	"Host (RetroPlug)"  /* RetroPlug: IO_CUSTOM's name, so a debug message that names a port's device names it */
 };
 
 #define GAMEPAD_TH0 0
@@ -1829,6 +1830,13 @@ uint8_t io_data_read(io_port * port, uint32_t current_cycle)
 		device_driven = 0x7F;
 		break;
 #endif
+	case IO_CUSTOM:
+		/* RetroPlug: the host's queued level, at this read's exact cycle. */
+		input = io_custom_input(port, current_cycle);
+		/* RetroPlug: only the two sync pins are the host's. The tail then mixes in this port's own data latch on the
+		 * pins the ROM made outputs ($A1000B), and pulls the undriven bits high, exactly as it does for a pad. */
+		device_driven = 0x60;
+		break;
 	default:
 		input = 0;
 		device_driven = 0;

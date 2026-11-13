@@ -26,7 +26,12 @@ enum {
 	IO_SEGA_PARALLEL,
 	IO_GENERIC,
 	IO_GENERIC_SERIAL,
-	IO_HEARTBEAT_TRAINER
+	IO_HEARTBEAT_TRAINER,
+	/* RetroPlug: a device the host drives. The port's reads are handed to the host with their exact master clock (the
+	 * same cycle every other device gets), which is what lets a host hold a level on a pin from a queued schedule
+	 * instead of at a block boundary. It supplies the pins it DRIVES; the direction rule and the pull-ups on the rest
+	 * are io_data_read's own tail, unchanged. */
+	IO_CUSTOM
 };
 
 typedef struct io_port io_port;
@@ -150,6 +155,8 @@ void io_data_write(io_port * pad, uint8_t value, uint32_t current_cycle);
 void io_tx_write(io_port *port, uint8_t value, uint32_t current_cycle);
 void io_sctrl_write(io_port *port, uint8_t value, uint32_t current_cycle);
 uint8_t io_data_read(io_port * pad, uint32_t current_cycle);
+/* RetroPlug: the host device's input byte for this read (bit 5 TR, bit 6 TH for the Mega Drive's port 2). */
+uint8_t io_custom_input(io_port *port, uint32_t current_cycle);
 uint8_t io_rx_read(io_port * port, uint32_t current_cycle);
 uint8_t io_sctrl_read(io_port *port, uint32_t current_cycle);
 uint32_t io_next_interrupt(io_port *port, uint32_t current_cycle);
