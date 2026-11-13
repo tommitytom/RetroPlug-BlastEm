@@ -177,11 +177,13 @@ void init_deserialize(deserialize_buffer *buf, uint8_t *data, size_t size)
 /* RetroPlug: every refusal below latches the buffer and leaves cur_pos at the end of it, so the caller's section loop
  * stops instead of reading the same short field forever, and the value a caller gets back is zero, which nothing
  * consumes before it has checked the latch. A state that cannot be read whole is a refusal the caller returns, not a
- * process that exits. */
+ * process that exits. Each length check is written `cur_pos > size || size - cur_pos < n` for the same reason: a
+ * deserializer may move cur_pos past its buffer on purpose (the VDP skips VRAM beyond 64 KiB out of a state, or out
+ * of a lying one), and the bare subtraction would then wrap to a huge size_t and pass. */
 uint32_t load_int32(deserialize_buffer *buf)
 {
 	uint32_t val = 0;
-	if ((buf->size - buf->cur_pos) < sizeof(val)) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < sizeof(val)) {
 		warning("Failed to load required int32 field\n");
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -197,7 +199,7 @@ uint32_t load_int32(deserialize_buffer *buf)
 uint16_t load_int16(deserialize_buffer *buf)
 {
 	uint16_t val = 0;
-	if ((buf->size - buf->cur_pos) < sizeof(val)) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < sizeof(val)) {
 		warning("Failed to load required int16 field\n");
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -211,7 +213,7 @@ uint16_t load_int16(deserialize_buffer *buf)
 uint8_t load_int8(deserialize_buffer *buf)
 {
 	uint8_t val = 0;
-	if ((buf->size - buf->cur_pos) < sizeof(val)) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < sizeof(val)) {
 		warning("Failed to load required int8 field\n");
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -223,7 +225,7 @@ uint8_t load_int8(deserialize_buffer *buf)
 
 void load_buffer8(deserialize_buffer *buf, void *dst, size_t len)
 {
-	if ((buf->size - buf->cur_pos) < len) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < len) {
 		warning("Failed to load required buffer of size %d\n", (int)len);
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -235,7 +237,7 @@ void load_buffer8(deserialize_buffer *buf, void *dst, size_t len)
 
 void load_buffer16(deserialize_buffer *buf, uint16_t *dst, size_t len)
 {
-	if ((buf->size - buf->cur_pos) < len * sizeof(uint16_t)) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < len * sizeof(uint16_t)) {
 		warning("Failed to load required buffer of size %d\n", (int)len);
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -249,7 +251,7 @@ void load_buffer16(deserialize_buffer *buf, uint16_t *dst, size_t len)
 }
 void load_buffer32(deserialize_buffer *buf, uint32_t *dst, size_t len)
 {
-	if ((buf->size - buf->cur_pos) < len * sizeof(uint32_t)) {
+	if (buf->cur_pos > buf->size || (buf->size - buf->cur_pos) < len * sizeof(uint32_t)) {
 		warning("Failed to load required buffer of size %d\n", (int)len);
 		buf->failed = 1;
 		buf->cur_pos = buf->size;
@@ -279,7 +281,7 @@ void load_section(deserialize_buffer *buf)
 		/* RetroPlug: one of the two loads above refused, so there is no section here to read. */
 		return;
 	}
-	if (size > (buf->size - buf->cur_pos)) {
+	if (buf->cur_pos > buf->size || size > (buf->size - buf->cur_pos)) {
 		warning("Section is bigger than remaining space in file\n");
 		buf->failed = 1;
 		buf->cur_pos = buf->size;

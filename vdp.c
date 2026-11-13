@@ -6602,7 +6602,17 @@ void vdp_deserialize(deserialize_buffer *buf, void *vcontext)
 	}
 	load_buffer8(buf, context->vdpmem, (vramk * 1024) <= VRAM_SIZE ? vramk * 1024 : VRAM_SIZE);
 	if ((vramk * 1024) > VRAM_SIZE) {
-		buf->cur_pos += (vramk * 1024) - VRAM_SIZE;
+		/* RetroPlug: the size comes out of the state, and a state claiming more VRAM than this machine has is skipping
+		 * the excess rather than refusing. That skip is a move of cur_pos over bytes that have to be there: one past
+		 * the section's end used to make every later length check wrap and read the caller's memory instead. */
+		size_t skip = (vramk * 1024) - VRAM_SIZE;
+		if (buf->cur_pos > buf->size || skip > buf->size - buf->cur_pos) {
+			warning("Save state claims %d KB of VRAM, more than this build's %d KB\n", vramk, VRAM_SIZE / 1024);
+			buf->failed = 1;
+			buf->cur_pos = buf->size;
+			return;
+		}
+		buf->cur_pos += skip;
 	}
 	load_buffer16(buf, context->cram, CRAM_SIZE);
 	for (int i = 0; i < CRAM_SIZE; i++)
