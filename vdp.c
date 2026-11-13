@@ -6598,7 +6598,12 @@ void vdp_deserialize(deserialize_buffer *buf, void *vcontext)
 		vramk = load_int8(buf);
 	}
 	if (version > VDP_STATE_VERSION) {
-		warning("Save state has VDP version %d, but this build only understands versions %d and lower", version, VDP_STATE_VERSION);
+		/* RetroPlug: a newer build's VDP layout is not this one's, and the fields after this byte may have moved, so a
+		 * warning and a read on misreads a state that a same-identifier, newer serializer wrote. Refuse it. */
+		warning("Save state has VDP version %d, but this build only understands versions %d and lower\n", version, VDP_STATE_VERSION);
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
 	}
 	load_buffer8(buf, context->vdpmem, (vramk * 1024) <= VRAM_SIZE ? vramk * 1024 : VRAM_SIZE);
 	if ((vramk * 1024) > VRAM_SIZE) {
@@ -6654,6 +6659,17 @@ void vdp_deserialize(deserialize_buffer *buf, void *vcontext)
 		context->fifo_write = 0;
 	}
 	uint16_t flags = load_int16(buf);
+	/* RetroPlug: the console's region is part of the machine the caller built (the VDP's own HZ50 bit, which sizes the
+	 * frame and the counters), and a state does not carry it. A state from another region's console would leave a frame
+	 * of one region over a VDP of the other, so it is refused: the two flags have to agree. The one in this context is
+	 * the freshly booted core's, since nothing above has touched it. */
+	if ((flags >> 8 & FLAG2_REGION_PAL) != (context->flags2 & FLAG2_REGION_PAL)) {
+		warning("Save state is from a %s console, this one is %s\n",
+			flags >> 8 & FLAG2_REGION_PAL ? "PAL" : "NTSC", context->flags2 & FLAG2_REGION_PAL ? "PAL" : "NTSC");
+		buf->failed = 1;
+		buf->cur_pos = buf->size;
+		return;
+	}
 	context->flags2 = flags >> 8;
 	context->flags = flags;
 	context->frame = load_int32(buf);
