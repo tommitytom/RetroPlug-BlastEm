@@ -725,9 +725,13 @@ void machine_freeze(tern_node *config, debug_callback callback, void *data, char
  * vdp_port_read). No static is left on this path either: freeze_choice is the frontend's, and this branch no longer
  * reaches it. */
 #if defined(ISLIB) || defined(IS_LIB)
+	/* RetroPlug: a cart can reach this once per offending ACCESS, from inside a run on the thread that runs it (the
+	 * host's audio thread), so the console's own budget decides whether this one prints (rp_freeze_log_allowed). */
 	va_list args;
 	va_start(args, format);
-	log_msg(format, WARN, args);
+	if (rp_freeze_log_allowed(data)) {
+		log_msg(format, WARN, args);
+	}
 	va_end(args);
 	return;
 #else

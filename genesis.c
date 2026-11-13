@@ -56,6 +56,29 @@
 #define Z80_OPTS options
 #endif
 
+/* RetroPlug: the decision and the budget behind every diagnostic that can fire once per cart ACCESS (machine_freeze's
+ * library branch in config.c, and the Z80's two banked-write/read warnings below). A misbehaving cart could otherwise
+ * turn a run into unbounded stderr writes on the thread that runs it, which is the audio thread in this host. */
+uint8_t rp_freeze_log_allowed(void *context)
+{
+	genesis_context *gen = context;
+	if (!gen) {
+		return 1;
+	}
+	if (gen->freeze_log_seen != UINT32_MAX) {
+		gen->freeze_log_seen++;
+	}
+	if (gen->freeze_log_printed > RP_FREEZE_LOG_LIMIT) {
+		return 0;
+	}
+	gen->freeze_log_printed++;
+	if (gen->freeze_log_printed > RP_FREEZE_LOG_LIMIT) {
+		fprintf(stderr, "further machine freeze diagnostics from this console are suppressed; %u seen so far\n",
+			gen->freeze_log_seen);
+	}
+	return 1;
+}
+
 void genesis_serialize(genesis_context *gen, serialize_buffer *buf, uint32_t m68k_pc, uint8_t all)
 {
 	if (all) {
@@ -1865,7 +1888,8 @@ static uint8_t z80_read_bank(uint32_t location, void * vcontext)
 			context->Z80_CYCLE += gen->m68k->cycles - prev_cycles;
 		}
 		return ret;
-	} else {
+	} else if (rp_freeze_log_allowed(gen)) {
+		/* RetroPlug: once per console's budget, not once per access (rp_freeze_log_allowed). */
 		fprintf(stderr, "Unhandled read by Z80 from address %X through banked memory area (%X)\n", address, gen->z80_bank_reg << 15);
 	}
 	return 0;
@@ -1898,7 +1922,8 @@ static void *z80_write_bank(uint32_t location, void * vcontext, uint8_t value)
 		if (gen->m68k->cycles != prev_cycles) {
 			context->Z80_CYCLE += gen->m68k->cycles - prev_cycles;
 		}
-	} else {
+	} else if (rp_freeze_log_allowed(gen)) {
+		/* RetroPlug: once per console's budget, not once per access (rp_freeze_log_allowed). */
 		fprintf(stderr, "Unhandled write by Z80 to address %X through banked memory area\n", address);
 	}
 	return context;

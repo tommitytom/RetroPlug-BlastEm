@@ -26,6 +26,14 @@ typedef void (*log_fun)(log_level level, char *message);
 #define PATH_SEP "/"
 #endif
 
+#ifdef _MSC_VER
+/* RetroPlug: the sources spell these the POSIX way on every platform, and MinGW's headers provide them; MSVC's CRT
+ * has only the underscore names (its <string.h> declares them, so the spellings here meet their declarations). */
+#define strcasecmp  _stricmp
+#define strncasecmp _strnicmp
+#define strdup      _strdup
+#endif
+
 #ifdef _WIN32
 //redirect standard fopen to a wrapper that does utf8/utf16 conversion and uses _wfopen
 FILE *fopen_utf8(const char *path, const char *mode);
@@ -93,6 +101,10 @@ void warning(char *format, ...);
 void debug_message(char *format, ...);
 //Prints a log message of the specified level
 void log_msg(char *format, log_level level, va_list args);
+/* RetroPlug: whether this diagnostic may print. `context` is the genesis_context it is about (every caller of
+ * machine_freeze in the compiled file set passes its console), whose freeze_log_seen/freeze_log_printed budget bounds
+ * the stderr traffic a cart can cause; a null context, or a build without the field's console behind it, prints. */
+uint8_t rp_freeze_log_allowed(void *context);
 //Disables output of info and debug messages to stdout
 void disable_stdout_messages(void);
 //Returns stdout disable status

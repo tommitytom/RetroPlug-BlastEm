@@ -106,10 +106,19 @@ struct genesis_context {
 	uint8_t         pico_story_pages[7];
 	eeprom_state    eeprom;
 	nor_state       nor;
+	/* RetroPlug: this console's machine-freeze diagnostics, seen and printed. A cart reaches machine_freeze (and the
+	 * Z80's banked-write warning) once per offending ACCESS from inside a run, so the old unconditional vfprintf was
+	 * unbounded stderr I/O on whatever thread runs the console. The first RP_FREEZE_LOG_LIMIT prints and one notice
+	 * saying the rest are suppressed; every further one is only counted here. */
+	uint32_t        freeze_log_seen;
+	uint32_t        freeze_log_printed;
 };
 
 #define RAM_WORDS 32 * 1024
 #define Z80_RAM_BYTES 8 * 1024
+/* RetroPlug: how many of a console's machine-freeze diagnostics print before the rest are only counted (see
+ * freeze_log_seen above, and rp_freeze_log_allowed in util.h). */
+#define RP_FREEZE_LOG_LIMIT 8
 
 genesis_context *alloc_config_genesis(void *rom, uint32_t rom_size, void *lock_on, uint32_t lock_on_size, uint32_t system_opts, uint8_t force_region);
 genesis_context *alloc_config_genesis_cdboot(system_media *media, uint32_t system_opts, uint8_t force_region);

@@ -535,6 +535,8 @@ vdp_context *init_vdp_context(uint8_t region_pal, uint8_t has_max_vsram, uint8_t
 		context->fb = render_get_framebuffer(FRAMEBUFFER_ODD, &context->output_pitch);
 	}
 	context->output = (pixel_t *)(((char *)context->fb) + context->output_pitch * context->border_top);
+	/* RetroPlug: the same library-build guard as the two above: the thread does not exist here, so neither does its
+	 * start or the event log's memory reader. */
 #if !defined(_WIN32) && !defined(IS_LIB)
 	if (ret->renderer) {
 		event_log_mem();
@@ -3461,6 +3463,8 @@ static void draw_right_border(vdp_context *context)
 	}\
 	CHECK_ONLY
 
+/* RetroPlug: the line a busted border writes is the console's own (vdp_context.dummy_line), not the file-scope array
+ * this used to be shared through; it is only ever written. */
 #define SPRITE_RENDER_H40(slot) \
 	case slot:\
 		OUTPUT_PIXEL_H40(slot)\
@@ -3505,6 +3509,7 @@ static void draw_right_border(vdp_context *context)
 
 //Note that the line advancement check will fail if BG_START_SLOT is > 6
 //as we're bumping up against the hcounter jump
+/* RetroPlug: same border-busting line as SPRITE_RENDER_H40, this console's own. */
 #define SPRITE_RENDER_H32(slot) \
 	case slot:\
 		OUTPUT_PIXEL_H32(slot)\
@@ -3553,6 +3558,7 @@ static void draw_right_border(vdp_context *context)
 		context->cycles += slot_cycles;\
 		CHECK_ONLY
 
+/* RetroPlug: same border-busting line as SPRITE_RENDER_H40, this console's own. */
 #define MODE4_CHECK_SLOT_LINE(slot) \
 		if (context->flags & FLAG_DMA_RUN) { run_dma_src(context, -1); } \
 		if ((slot) == BG_START_SLOT + (256+HORIZ_BORDER)/2) {\
@@ -3817,6 +3823,8 @@ static void vdp_h40(vdp_context * context, uint32_t target_cycles)
 	uint8_t bgindex = context->regs[REG_BG_COLOR] & 0x3F;
 	uint8_t test_layer = context->test_regs[0] >> 7 & 3;
 	if (!context->output) {
+		/* RetroPlug: the console's own border-busting line, as the SPRITE_RENDER_H40 macro above; the same field is
+		 * reassigned mid-frame below. */
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
 		context->output = context->dummy_line;
@@ -4202,6 +4210,7 @@ static void vdp_h32(vdp_context * context, uint32_t target_cycles)
 	uint8_t bgindex = context->regs[REG_BG_COLOR] & 0x3F;
 	uint8_t test_layer = context->test_regs[0] >> 7 & 3;
 	if (!context->output) {
+		/* RetroPlug: the console's own border-busting line, as the SPRITE_RENDER_H32 macro above. */
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
 		context->output = context->dummy_line;
@@ -4564,6 +4573,7 @@ static void vdp_h32_mode4(vdp_context * context, uint32_t target_cycles)
 	uint8_t bgindex = 0x10 | (context->regs[REG_BG_COLOR] & 0xF) + MODE4_OFFSET;
 	uint8_t test_layer = context->test_regs[0] >> 7 & 3;
 	if (!context->output) {
+		/* RetroPlug: the console's own border-busting line, as MODE4_CHECK_SLOT_LINE above. */
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
 		context->output = context->dummy_line;

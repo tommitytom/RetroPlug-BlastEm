@@ -93,6 +93,9 @@ typedef struct {
 			uint8_t track_low;
 		} tocn;
 		struct {
+			/* RetroPlug: a member, because an empty struct is a GNU extension and MSVC rejects it in C. Nothing in this
+			 * build compiles the Sega CD, so no byte of this union is ever read. */
+			uint8_t unused;
 		} error;
 	} b;
 	uint8_t checksum;
