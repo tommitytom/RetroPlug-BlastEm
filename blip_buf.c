@@ -1,7 +1,8 @@
 /* RetroPlug: blip_buf 1.1.0 (Shay Green, LGPL-2.1 or later), copied from deps/mesen/Utilities/Audio/blip_buf.{cpp,h}
  * in this repository. Three edits, mechanical: pch.h dropped (BlastEm has no precompiled header), EXPORT defined empty
- * (this is a static library, not a DLL), and Mesen's own blip_reset() kept, which is not stock 1.1.0. BlastEm has no
- * band-limited resampler of its own: its render_audio.c interpolates linearly. packages/blastem links this instead. */
+ * (this is a static library, not a DLL), and the in-place blip_reset() kept, which RetroPlug added to its copy of Mesen
+ * (it is not stock 1.1.0; deps/mesen carries the same marker on it). BlastEm has no band-limited resampler of its own:
+ * its render_audio.c interpolates linearly. packages/blastem links this instead. */
 
 /* blip_buf 1.1.0. http://www.slack.net/~ant/ */
 
