@@ -409,6 +409,13 @@ void event_log_mem_stop(void)
 static uint32_t last_word_address;
 void event_vram_word(uint32_t cycle, uint32_t address, uint16_t value)
 {
+	/* RetroPlug: the delta state below is a file-scope static, and the logger is OFF in a host that runs several
+	 * consoles in one process, so writing it here was a data race on the hot path (every FIFO VRAM write of every
+	 * console) for a delta event_log() then discards. The condition is event_log's own for these types, so an
+	 * inactive logger with no reader does exactly what it did and touches nothing shared. */
+	if (!fully_active && !mem_reader) {
+		return;
+	}
 	uint32_t delta = address - last_word_address;
 	if (delta < 256) {
 		uint8_t buffer[3] = {delta, value >> 8, value};
@@ -423,6 +430,10 @@ void event_vram_word(uint32_t cycle, uint32_t address, uint16_t value)
 static uint32_t last_byte_address;
 void event_vram_byte(uint32_t cycle, uint16_t address, uint8_t byte, uint8_t auto_inc)
 {
+	/* RetroPlug: as event_vram_word above: an inactive logger does not reach the static. */
+	if (!fully_active && !mem_reader) {
+		return;
+	}
 	uint32_t delta = address - last_byte_address;
 	if (delta == 1) {
 		event_log(EVENT_VRAM_BYTE_ONE, cycle, sizeof(byte), &byte);
