@@ -507,12 +507,16 @@ static int vdp_render_thread_main(void *vcontext)
 }
 #endif
 
+/* RetroPlug: the threaded VDP renderer is a singleton (a file-static thread) and an SDL frontend's, so a library
+ * build that stubs render_is_threaded_video() to 0 must not reference either. BlastEm is built without it here. */
+#if !defined(_WIN32) && !defined(IS_LIB)
 static render_thread vdp_thread;
+#endif
 vdp_context *init_vdp_context(uint8_t region_pal, uint8_t has_max_vsram, uint8_t type)
 {
 	vdp_context *ret = init_vdp_context_int(region_pal, has_max_vsram, type);
 	vdp_context *context;
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(IS_LIB)
 	if (render_is_threaded_video()) {
 		context = ret->renderer = init_vdp_context_int(region_pal, has_max_vsram, type);
 		context->is_threaded_renderer = 1;
@@ -529,7 +533,7 @@ vdp_context *init_vdp_context(uint8_t region_pal, uint8_t has_max_vsram, uint8_t
 		context->fb = render_get_framebuffer(FRAMEBUFFER_ODD, &context->output_pitch);
 	}
 	context->output = (pixel_t *)(((char *)context->fb) + context->output_pitch * context->border_top);
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(IS_LIB)
 	if (ret->renderer) {
 		event_log_mem();
 		render_create_thread(&vdp_thread, "vdp_render", vdp_render_thread_main, ret->renderer);
