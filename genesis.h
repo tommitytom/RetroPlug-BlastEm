@@ -67,8 +67,9 @@ struct genesis_context {
 	 * cycle_base, and the 64-bit base itself. A 32-bit cycle count cannot address a session's whole timeline, and a
 	 * host that runs a block at a time needs to stop at the block's end rather than at a frame boundary.
 	 *
-	 * cycle_base MUST be 64-bit: the 32-bit 68k count is rebased about every 80 s (MAX_NO_ADJUST, genesis.c:561), so a
-	 * 32-bit base wraps on the second rebase and the session's clock jumps backwards. */
+	 * cycle_base MUST be 64-bit: the 32-bit 68k count is rebased about every 80 s (when it passes MAX_NO_ADJUST, which
+	 * sits ADJUST_BUFFER below the top of the count), so a 32-bit base wraps on the second rebase and the session's
+	 * clock jumps backwards. */
 	uint64_t        cycle_base;
 	uint32_t        stop_cycle;
 	uint32_t        max_cycles;

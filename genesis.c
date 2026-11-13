@@ -585,9 +585,10 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 	if (gen->mars) {
 		s32x_run(gen->mars, mclks);
 	}
-	/* RetroPlug: stop at the requested master clock. A sync is only reached because sync_cycle was clamped to it
-	 * below, so this is the first one at or past stop_cycle; adjust_int_cycle then ends the run at this instruction
-	 * boundary, and resume_genesis' loop sees should_return. */
+	/* RetroPlug: stop at the requested master clock. sync_cycle is clamped to stop_cycle below, so this is the first
+	 * sync at or past it: the flag is what resume_genesis' loop tests once m68k_execute's by-value bound (computed by
+	 * an earlier sync, and never past stop_cycle) has ended the run. The sync that sets it is often a port handler's,
+	 * in the middle of an instruction. */
 	if (gen->stop_cycle && mclks >= gen->stop_cycle) {
 		context->should_return = 1;
 	}
@@ -623,44 +624,6 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 				exit_after -= elapsed;
 			}
 		}
-		if (context->cycles > MAX_NO_ADJUST || (gen->mars && gen->mars->main->cycles > MAX_NO_ADJUST)) {
-			uint32_t deduction = mclks - ADJUST_BUFFER;
-			/* RetroPlug: the rebase is the one place the 32-bit cycle count is re-based, so the 64-bit base moves
-			 * with it and cycle_base + cycles stays the absolute master clock. */
-			gen->cycle_base += deduction;
-			/* RetroPlug: and the stop moves with it too. A stop_cycle that stayed put would make one run span the
-			 * whole rebased window (about 4e9 clocks, 80 s of emulation) inside a single block, because the sync
-			 * above would not fire until the 32-bit count caught up with a target that is now 80 s away. */
-			if (gen->stop_cycle) {
-				gen->stop_cycle = gen->stop_cycle > deduction ? gen->stop_cycle - deduction : 0;
-			}
-			vdp_adjust_cycles(v_context, deduction);
-			io_adjust_cycles(gen->io.ports, context->cycles, deduction);
-			io_adjust_cycles(gen->io.ports+1, context->cycles, deduction);
-			io_adjust_cycles(gen->io.ports+2, context->cycles, deduction);
-			if (gen->mapper_type == MAPPER_JCART) {
-				jcart_adjust_cycles(gen, deduction);
-			}
-			context->cycles -= deduction;
-			z80_adjust_cycles(z_context, deduction);
-			ym_adjust_cycles(gen->ym, deduction);
-			if (gen->ym->vgm) {
-				vgm_adjust_cycles(gen->ym->vgm, deduction);
-			}
-			gen->psg->cycles -= deduction;
-			if (gen->reset_cycle != CYCLE_NEVER) {
-				gen->reset_cycle -= deduction;
-			}
-			event_cycle_adjust(mclks, deduction);
-			if (gen->expansion) {
-				scd_adjust_cycle(gen->expansion, deduction);
-			}
-			if (gen->mars) {
-				s32x_adjust_cycles(gen->mars, deduction);
-			}
-			gen->last_flush_cycle -= deduction;
-			gen->last_sync_cycle -= deduction;
-		}
 		if (gen->header.frame_advance) {
 			gen->header.frame_advance = 0;
 			gen->header.paused = 1;
@@ -670,9 +633,54 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 		event_soft_flush(mclks);
 		gen->last_flush_cycle = mclks;
 	}
+	/* RetroPlug: rebase only from resume_genesis' own sync, the one caller that passes a nonzero address and has no
+	 * m68k_execute frame of its own. Every in-execute caller (a port handler, m68k_sync_cycle) passes 0, and
+	 * m68k_execute's loop bound is a by-value copy of target_cycle that a rebase cannot move: rebasing there makes that
+	 * one loop run `deduction` more clocks, about 80 s of emulation inside one audio block. A top-level sync happens at
+	 * least every max_cycles lines, so the rebase is never late by more than a line, and ADJUST_BUFFER is eight frames
+	 * of headroom. */
+	if (address && (context->cycles > MAX_NO_ADJUST || (gen->mars && gen->mars->main->cycles > MAX_NO_ADJUST))) {
+		uint32_t deduction = mclks - ADJUST_BUFFER;
+		/* RetroPlug: the rebase is the one place the 32-bit cycle count is re-based, so the 64-bit base moves
+		 * with it and cycle_base + cycles stays the absolute master clock. */
+		gen->cycle_base += deduction;
+		/* RetroPlug: and the stop moves with it too. A stop_cycle that stayed put would make one run span the
+		 * whole rebased window (about 4e9 clocks, 80 s of emulation) inside a single block, because the sync
+		 * above would not fire until the 32-bit count caught up with a target that is now 80 s away. */
+		if (gen->stop_cycle) {
+			gen->stop_cycle = gen->stop_cycle > deduction ? gen->stop_cycle - deduction : 0;
+		}
+		vdp_adjust_cycles(v_context, deduction);
+		io_adjust_cycles(gen->io.ports, context->cycles, deduction);
+		io_adjust_cycles(gen->io.ports+1, context->cycles, deduction);
+		io_adjust_cycles(gen->io.ports+2, context->cycles, deduction);
+		if (gen->mapper_type == MAPPER_JCART) {
+			jcart_adjust_cycles(gen, deduction);
+		}
+		context->cycles -= deduction;
+		z80_adjust_cycles(z_context, deduction);
+		ym_adjust_cycles(gen->ym, deduction);
+		if (gen->ym->vgm) {
+			vgm_adjust_cycles(gen->ym->vgm, deduction);
+		}
+		gen->psg->cycles -= deduction;
+		if (gen->reset_cycle != CYCLE_NEVER) {
+			gen->reset_cycle -= deduction;
+		}
+		event_cycle_adjust(mclks, deduction);
+		if (gen->expansion) {
+			scd_adjust_cycle(gen->expansion, deduction);
+		}
+		if (gen->mars) {
+			s32x_adjust_cycles(gen->mars, deduction);
+		}
+		gen->last_flush_cycle -= deduction;
+		gen->last_sync_cycle -= deduction;
+	}
 	gen->frame_end = vdp_cycles_to_frame_end(v_context);
 	/* RetroPlug: the block's end is the next sync when it is sooner than the frame's, which is what makes the stop
-	 * above reachable at all (a sync only happens once cycles >= sync_cycle). */
+	 * above reachable: sync_cycle is the bound the generated code tests, while a memory handler or m68k_sync_cycle can
+	 * sync earlier. */
 	context->sync_cycle = gen->stop_cycle && gen->stop_cycle < gen->frame_end ? gen->stop_cycle : gen->frame_end;
 	//printf("Set sync cycle to: %d @ %d, vcounter: %d, hslot: %d\n", context->sync_cycle, context->cycles, v_context->vcounter, v_context->hslot);
 	if (!address && (gen->header.enter_debugger || gen->header.save_state)) {
