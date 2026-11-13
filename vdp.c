@@ -452,7 +452,9 @@ static void write_cram(vdp_context * context, uint16_t address, uint16_t value)
 	}
 }
 
-#ifndef _WIN32
+/* RetroPlug: the thread entry point is named only from the render_create_thread() call a library build compiles
+ * out, so it goes with it: a static function nothing calls is dead code, not a stub. */
+#if !defined(_WIN32) && !defined(IS_LIB)
 static int vdp_render_thread_main(void *vcontext)
 {
 	vdp_context *context = vcontext;
