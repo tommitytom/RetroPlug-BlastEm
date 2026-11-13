@@ -715,7 +715,20 @@ tern_node *set_machine_feeze_choice(tern_node *config, uint8_t choice)
 
 void machine_freeze(tern_node *config, debug_callback callback, void *data, char *format, ...)
 {
-#ifdef ISLIB
+/* RetroPlug: a library build does not end the process. Upstream's guard tests ISLIB, which nothing defines: the library
+ * builds define IS_LIB (the Makefile's LIBCFLAGS and the host's cmake/blastem.cmake), so every freeze fell through to
+ * CHOICE_FATAL below and exited. A cart's own program reaches these (an unmapped read or write, a write to the HV
+ * counter, a Z80 VDP window misuse, a VDP port read the decoder has no answer for), and a host that runs carts in one
+ * process cannot be ended by one. The message still reaches the log at WARN, and every caller has a defined behaviour
+ * on the return: an unmapped read answers the open bus (get_open_bus_value), an unmapped write is dropped, a port write
+ * continues on the five bits the VDP decodes, and the one read that had no answer at all now answers the bus (see
+ * vdp_port_read). No static is left on this path either: freeze_choice is the frontend's, and this branch no longer
+ * reaches it. */
+#if defined(ISLIB) || defined(IS_LIB)
+	va_list args;
+	va_start(args, format);
+	log_msg(format, WARN, args);
+	va_end(args);
 	return;
 #else
 	static uint8_t freeze_choice;

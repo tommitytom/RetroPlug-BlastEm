@@ -1268,6 +1268,10 @@ static uint16_t vdp_port_read(uint32_t vdp_port, m68k_context * context)
 		}
 	} else if (vdp_port < 0x18){
 		machine_freeze(config, enter_68k_debugger_immediately, gen, "Illegal read from PSG  port %X\n", vdp_port);
+		/* RetroPlug: the PSG has no read path, so the port answers the open bus. Nothing assigned value here before,
+		 * which was invisible while the freeze above ended the process and is a read of an uninitialised 16-bit local
+		 * once it returns. */
+		value = get_open_bus_value(&gen->header);
 	} else {
 		value = get_open_bus_value(&gen->header);
 	}
