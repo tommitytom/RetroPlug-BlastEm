@@ -1240,6 +1240,13 @@ void ym_deserialize(deserialize_buffer *buf, void *vcontext)
 		context->last_status = context->status;
 		context->last_status_cycle = context->write_cycle;
 	}
+	/* RetroPlug: the register replay above runs before block and fnum are loaded, and the write that computes an
+	 * operator's phase increment (REG_FNUM_LOW) is the one it skips on purpose, so every operator would keep the
+	 * increment the freshly booted chip started with (zero) and a restored note would be silent. Recompute them from
+	 * the channel state the state just supplied, as ym_data_write does for the registers it does replay. */
+	for (int op = 0; op < OPN2_NUM_OPERATORS; op++) {
+		context->operators[op].phase_inc = ym_calc_phase_inc(context, context->operators + op, op);
+	}
 }
 
 void ym_enable_scope(ym2612_context *context, oscilloscope *scope, uint32_t master_clock)
