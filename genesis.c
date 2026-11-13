@@ -26,7 +26,10 @@
 #define MCLKS_NTSC 53693175
 #define MCLKS_PAL  53203395
 
-uint32_t MCLKS_PER_68K;
+/* RetroPlug: the 68k's clock divider is fixed at 7 on a Mega Drive (the M68K runs at MCLK/7). It was a writable
+ * file-scope variable that every allocation set from the config tree, which is shared state no second instance can
+ * own; there is no Mega Drive configuration in which it is anything else. */
+#define MCLKS_PER_68K 7
 #define MCLKS_PER_YM  7
 #define MCLKS_PER_Z80 15
 #define MCLKS_PER_PSG (MCLKS_PER_Z80*16)
@@ -306,9 +309,11 @@ static void deserialize(system_header *sys, uint8_t *data, size_t size)
 	genesis_deserialize(&buffer, gen);
 }
 
-uint16_t read_dma_value(uint32_t address)
+uint16_t read_dma_value(vdp_context *vdp, uint32_t address)
 {
-	genesis_context *genesis = (genesis_context *)current_system;
+	/* RetroPlug: the VDP names its own console (shared_init sets vdp->system at allocation); the old form cast the
+	 * process-global current_system, so a second console in one process DMAed out of the first one's RAM. */
+	genesis_context *genesis = (genesis_context *)vdp->system;
 	address *= 2;
 	//TODO: Figure out what happens when you try to DMA from weird adresses like IO or banked Z80 area
 	if ((address >= 0xA00000 && address < 0xB00000) || (address >= 0xC00000 && address <= 0xE00000)) {
@@ -336,9 +341,10 @@ uint16_t read_dma_value(uint32_t address)
 	return read_word(address, (void **)genesis->m68k->mem_pointers, &genesis->m68k->opts->gen, genesis->m68k);
 }
 
-void vdp_dma_started(void)
+void vdp_dma_started(vdp_context *vdp)
 {
-	genesis_context *genesis = (genesis_context *)current_system;
+	/* RetroPlug: same as read_dma_value: the VDP's own console, not the process-global one. */
+	genesis_context *genesis = (genesis_context *)vdp->system;
 	if (genesis->expansion) {
 		segacd_context *cd = genesis->expansion;
 		cd->has_vdp_dma_value = 0;
@@ -352,7 +358,7 @@ static uint16_t get_open_bus_value(system_header *system)
 #ifdef NEW_CORE
 	return genesis->m68k->prefetch;
 #else
-	return read_dma_value(genesis->m68k->last_prefetch_address/2);
+	return read_dma_value(genesis->vdp, genesis->m68k->last_prefetch_address/2);
 #endif
 }
 
@@ -2400,6 +2406,7 @@ static void free_genesis(system_header *system)
 	if (gen->header.type == SYSTEM_GENESIS) {
 		z80_options_free(gen->z80->Z80_OPTS);
 		free(gen->z80);
+		free(gen->z80_map);  // RetroPlug: the per-instance Z80 map kZ80MapTemplate was copied from
 		free(gen->zram);
 	}
 	if (gen->header.type == SYSTEM_PICO || gen->header.type == SYSTEM_COPERA) {
@@ -2858,25 +2865,20 @@ static void *tmss_even_write_8(uint32_t address, void *context, uint8_t value)
 	return context;
 }
 
+/* RetroPlug: the Z80's map, once as a template. It used to be shared_init's function-local static, whose [0].buffer
+ * every allocation overwrote with its own zram, and init_z80_opts keeps the array it is handed (z80_util.c) for every
+ * later z80_invalidate_code_range: the second console rebuilt the first one's map, and a state load re-resolved one
+ * console's Z80 through the other's RAM. Each console now copies this and owns the copy. */
+static const memmap_chunk kZ80MapTemplate[5] = {
+	{ 0x0000, 0x4000,  0x1FFF, .flags = MMAP_READ | MMAP_WRITE | MMAP_CODE},
+	{ 0x8000, 0x10000, 0x7FFF, .read_8 = z80_read_bank, .write_8 = z80_write_bank},
+	{ 0x4000, 0x6000,  0x0003, .read_8 = z80_read_ym, .write_8 = z80_write_ym},
+	{ 0x6000, 0x6100,  0xFFFF, .write_8 = z80_write_bank_reg},
+	{ 0x7F00, 0x8000,  0x00FF, .read_8 = z80_vdp_port_read, .write_8 = z80_vdp_port_write}
+};
+
 static genesis_context *shared_init(uint32_t system_opts, rom_info *rom, uint8_t force_region)
 {
-	static memmap_chunk z80_map[] = {
-		{ 0x0000, 0x4000,  0x1FFF, .flags = MMAP_READ | MMAP_WRITE | MMAP_CODE},
-		{ 0x8000, 0x10000, 0x7FFF, .read_8 = z80_read_bank, .write_8 = z80_write_bank},
-		{ 0x4000, 0x6000,  0x0003, .read_8 = z80_read_ym, .write_8 = z80_write_ym},
-		{ 0x6000, 0x6100,  0xFFFF, .write_8 = z80_write_bank_reg},
-		{ 0x7F00, 0x8000,  0x00FF, .read_8 = z80_vdp_port_read, .write_8 = z80_vdp_port_write}
-	};
-
-	char *m68k_divider = tern_find_path(config, "clocks\0m68k_divider\0", TVAL_PTR).ptrval;
-	if (!m68k_divider) {
-		m68k_divider = "7";
-	}
-	MCLKS_PER_68K = atoi(m68k_divider);
-	if (!MCLKS_PER_68K) {
-		MCLKS_PER_68K = 7;
-	}
-
 	genesis_context *gen = calloc(1, sizeof(genesis_context));
 	gen->header.set_speed_percent = set_speed_percent;
 	gen->header.start_context = start_genesis;
@@ -2937,10 +2939,14 @@ static genesis_context *shared_init(uint32_t system_opts, rom_info *rom, uint8_t
 	gen->psg = malloc(sizeof(psg_context));
 	psg_init(gen->psg, gen->master_clock, MCLKS_PER_PSG);
 
-	z80_map[0].buffer = gen->zram = calloc(1, Z80_RAM_BYTES);
+	/* RetroPlug: this console's own copy of the Z80's map (see kZ80MapTemplate), so the map init_z80_opts keeps
+	 * carries this console's zram and nothing a later console allocates can move it. */
+	gen->z80_map = malloc(sizeof(memmap_chunk) * 5);
+	memcpy(gen->z80_map, kZ80MapTemplate, sizeof(kZ80MapTemplate));
+	gen->z80_map[0].buffer = gen->zram = calloc(1, Z80_RAM_BYTES);
 #ifndef NO_Z80
 	z80_options *z_opts = malloc(sizeof(z80_options));
-	init_z80_opts(z_opts, z80_map, 5, NULL, 0, MCLKS_PER_Z80, 0xFFFF);
+	init_z80_opts(z_opts, gen->z80_map, 5, NULL, 0, MCLKS_PER_Z80, 0xFFFF);
 	gen->z80 = init_z80_context(z_opts);
 #ifndef NEW_CORE
 	gen->z80->next_int_pulse = z80_next_int_pulse;
@@ -2997,14 +3003,6 @@ static genesis_context *shared_init_gen(rom_info info, void *lock_on, uint32_t l
 		byteswap_rom(nearest_pow2(lock_on_size), lock_on);
 	}
 #endif
-	char *m68k_divider = tern_find_path(config, "clocks\0m68k_divider\0", TVAL_PTR).ptrval;
-	if (!m68k_divider) {
-		m68k_divider = "7";
-	}
-	MCLKS_PER_68K = atoi(m68k_divider);
-	if (!MCLKS_PER_68K) {
-		MCLKS_PER_68K = 7;
-	}
 	genesis_context *gen = shared_init(ym_opts, &info, force_region);
 	gen->z80->mem_pointers[1] = gen->z80->mem_pointers[2] = rom;
 
@@ -3425,14 +3423,6 @@ genesis_context* alloc_config_pico(void *rom, uint32_t rom_size, void *lock_on, 
 		byteswap_rom(nearest_pow2(lock_on_size), lock_on);
 	}
 #endif
-	char *m68k_divider = tern_find_path(config, "clocks\0m68k_divider\0", TVAL_PTR).ptrval;
-	if (!m68k_divider) {
-		m68k_divider = "7";
-	}
-	MCLKS_PER_68K = atoi(m68k_divider);
-	if (!MCLKS_PER_68K) {
-		MCLKS_PER_68K = 7;
-	}
 	genesis_context *gen = calloc(1, sizeof(genesis_context));
 	gen->header.set_speed_percent = set_speed_percent;
 	gen->header.start_context = start_genesis;

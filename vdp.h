@@ -326,8 +326,10 @@ void vdp_force_update_framebuffer(vdp_context *context);
 void vdp_toggle_debug_view(vdp_context *context, uint8_t debug_type);
 void vdp_inc_debug_mode(vdp_context *context);
 //to be implemented by the host system
-uint16_t read_dma_value(uint32_t address);
-void vdp_dma_started(void);
+/* RetroPlug: the DMA source read takes the VDP it belongs to. The old form read the process-global current_system,
+ * so two consoles in one process would DMA out of each other's RAM. */
+uint16_t read_dma_value(vdp_context *vdp, uint32_t address);
+void vdp_dma_started(vdp_context *vdp);
 void vdp_replay_event(vdp_context *context, uint8_t event, event_reader *reader);
 uint16_t vdp_status(vdp_context *context);
 void vdp_reg_write(vdp_context *context, uint16_t reg, uint16_t value);

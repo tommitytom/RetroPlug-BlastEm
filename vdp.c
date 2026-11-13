@@ -1345,7 +1345,8 @@ static void run_dma_src(vdp_context * context, int32_t slot)
 			cur = context->fifo + context->fifo_write;
 			cur->cycle = context->cycles + ((context->regs[REG_MODE_4] & BIT_H40) ? 16 : 20)*FIFO_LATENCY;
 			cur->address = context->address;
-			cur->value = read_dma_value((context->regs[REG_DMASRC_H] << 16) | (context->regs[REG_DMASRC_M] << 8) | context->regs[REG_DMASRC_L]);
+			/* RetroPlug: the DMA read names this VDP, whose console it belongs to, not the process-global one. */
+			cur->value = read_dma_value(context, (context->regs[REG_DMASRC_H] << 16) | (context->regs[REG_DMASRC_M] << 8) | context->regs[REG_DMASRC_L]);
 			cur->cd = context->cd;
 			cur->partial = 0;
 			if (context->fifo_read < 0) {
@@ -5943,7 +5944,7 @@ int vdp_control_port_write(vdp_context * context, uint16_t value, uint32_t cpu_c
 					//only captures are from a direct color DMA demo which will generally start DMA at a very specific point in display so other values are plausible
 					//sticking with 3 slots for now until I can do some more captures
 					vdp_run_context_full(context, context->cycles + 12 * ((context->regs[REG_MODE_2] & BIT_MODE_5) && (context->regs[REG_MODE_4] & BIT_H40) ? 4 : 5));
-					vdp_dma_started();
+					vdp_dma_started(context);  // RetroPlug: this VDP's console, not the process-global one
 					context->flags |= FLAG_DMA_RUN;
 					if (context->dma_hook) {
 						context->dma_hook(context);

@@ -43,6 +43,9 @@ struct genesis_context {
 	uint16_t        *lock_on;
 	uint16_t        *work_ram;
 	uint8_t         *zram;
+	/* RetroPlug: this console's own copy of the Z80's memory map (genesis.c's kZ80MapTemplate); it used to be one
+	 * function-local static every allocation wrote its zram into. init_z80_opts keeps the array it is handed. */
+	memmap_chunk    *z80_map;
 	void            *expansion;
 	s32x            *mars;
 	void            *extra;

@@ -199,9 +199,10 @@ void gdb_run_command(m68k_context * context, uint32_t pc, char * command)
 		uint32_t after = m68k_decode(m68k_instruction_fetch, context, &inst, pc & 0xFFFFFF);
 
 		if (inst.op == M68K_RTS) {
-			after = (read_dma_value(context->aregs[7]/2) << 16) | read_dma_value(context->aregs[7]/2 + 1);
+			/* RetroPlug: read_dma_value takes the VDP; the console here is the one under debug (gen above). */
+			after = (read_dma_value(gen->vdp, context->aregs[7]/2) << 16) | read_dma_value(gen->vdp, context->aregs[7]/2 + 1);
 		} else if (inst.op == M68K_RTE || inst.op == M68K_RTR) {
-			after = (read_dma_value((context->aregs[7]+2)/2) << 16) | read_dma_value((context->aregs[7]+2)/2 + 1);
+			after = (read_dma_value(gen->vdp, (context->aregs[7]+2)/2) << 16) | read_dma_value(gen->vdp, (context->aregs[7]+2)/2 + 1);
 		} else if(m68k_is_branch(&inst)) {
 			if (inst.op == M68K_BCC && inst.extra.cond != COND_TRUE) {
 				root->branch_f = after;
@@ -458,9 +459,10 @@ void gdb_run_command(m68k_context * context, uint32_t pc, char * command)
 				uint32_t after = m68k_decode(m68k_instruction_fetch, context, &inst, pc & 0xFFFFFF);
 
 				if (inst.op == M68K_RTS) {
-					after = (read_dma_value(context->aregs[7]/2) << 16) | read_dma_value(context->aregs[7]/2 + 1);
+					/* RetroPlug: read_dma_value takes the VDP; the console here is the one under debug (gen above). */
+					after = (read_dma_value(gen->vdp, context->aregs[7]/2) << 16) | read_dma_value(gen->vdp, context->aregs[7]/2 + 1);
 				} else if (inst.op == M68K_RTE || inst.op == M68K_RTR) {
-					after = (read_dma_value((context->aregs[7]+2)/2) << 16) | read_dma_value((context->aregs[7]+2)/2 + 1);
+					after = (read_dma_value(gen->vdp, (context->aregs[7]+2)/2) << 16) | read_dma_value(gen->vdp, (context->aregs[7]+2)/2 + 1);
 				} else if(m68k_is_branch(&inst)) {
 					if (inst.op == M68K_BCC && inst.extra.cond != COND_TRUE) {
 						root->branch_f = after;
