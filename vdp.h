@@ -188,6 +188,11 @@ struct vdp_context {
 	struct vdp_context *renderer;
 	//pointer to current line in framebuffer
 	pixel_t        *output;
+	/* RetroPlug: the line a border-busting line writes when there is no output buffer (vdp_h40, vdp_h32 and
+	 * vdp_h32_mode4 fall back to it). It used to be one file-scope array that every console in the process wrote
+	 * through, so two consoles busting their borders at once raced in it. It is only ever written, never read, so its
+	 * contents carry nothing from one console to the next. */
+	pixel_t        dummy_line[LINEBUF_SIZE];
 	//pointer to current framebuffer
 	pixel_t       *fb;
 	uint8_t        *done_composite;

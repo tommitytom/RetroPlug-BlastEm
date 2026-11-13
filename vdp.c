@@ -3467,7 +3467,7 @@ static void draw_right_border(vdp_context *context)
 		if ((slot) == BG_START_SLOT + LINEBUF_SIZE/2) {\
 			advance_output_line(context);\
 			if (!context->output) {\
-				context->output = dummy_buffer;\
+				context->output = context->dummy_line;\
 			}\
 		}\
 		render_sprite_cells( context);\
@@ -3511,7 +3511,7 @@ static void draw_right_border(vdp_context *context)
 		if ((slot) == BG_START_SLOT + (256+HORIZ_BORDER)/2) {\
 			advance_output_line(context);\
 			if (!context->output) {\
-				context->output = dummy_buffer;\
+				context->output = context->dummy_line;\
 			}\
 		}\
 		render_sprite_cells( context);\
@@ -3558,7 +3558,7 @@ static void draw_right_border(vdp_context *context)
 		if ((slot) == BG_START_SLOT + (256+HORIZ_BORDER)/2) {\
 			advance_output_line(context);\
 			if (!context->output) {\
-				context->output = dummy_buffer;\
+				context->output = context->dummy_line;\
 			}\
 		}\
 		if ((slot) == 147) {\
@@ -3603,7 +3603,6 @@ static void draw_right_border(vdp_context *context)
 		render_sprite_cells_mode4(context);\
 		MODE4_CHECK_SLOT_LINE(CALC_SLOT(slot, 5))
 
-static pixel_t dummy_buffer[LINEBUF_SIZE];
 static void vdp_h40_line(vdp_context * context)
 {
 	uint16_t address;
@@ -3820,7 +3819,7 @@ static void vdp_h40(vdp_context * context, uint32_t target_cycles)
 	if (!context->output) {
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
-		context->output = dummy_buffer;
+		context->output = context->dummy_line;
 	}
 	switch(context->hslot)
 	{
@@ -3836,7 +3835,7 @@ static void vdp_h40(vdp_context * context, uint32_t target_cycles)
 			if (!context->output) {
 				//This shouldn't happen normally, but it can theoretically
 				//happen when doing border busting
-				context->output = dummy_buffer;
+				context->output = context->dummy_line;
 			}
 		}
 		OUTPUT_PIXEL(165)
@@ -4205,7 +4204,7 @@ static void vdp_h32(vdp_context * context, uint32_t target_cycles)
 	if (!context->output) {
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
-		context->output = dummy_buffer;
+		context->output = context->dummy_line;
 	}
 	switch(context->hslot)
 	{
@@ -4567,7 +4566,7 @@ static void vdp_h32_mode4(vdp_context * context, uint32_t target_cycles)
 	if (!context->output) {
 		//This shouldn't happen normally, but it can theoretically
 		//happen when doing border busting
-		context->output = dummy_buffer;
+		context->output = context->dummy_line;
 	}
 	switch(context->hslot)
 	{
