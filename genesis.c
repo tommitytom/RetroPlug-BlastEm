@@ -585,6 +585,12 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 	if (gen->mars) {
 		s32x_run(gen->mars, mclks);
 	}
+	/* RetroPlug: stop at the requested master clock. A sync is only reached because sync_cycle was clamped to it
+	 * below, so this is the first one at or past stop_cycle; adjust_int_cycle then ends the run at this instruction
+	 * boundary, and resume_genesis' loop sees should_return. */
+	if (gen->stop_cycle && mclks >= gen->stop_cycle) {
+		context->should_return = 1;
+	}
 	if (mclks >= gen->reset_cycle) {
 		gen->reset_requested = 1;
 		context->should_return = 1;
@@ -619,6 +625,15 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 		}
 		if (context->cycles > MAX_NO_ADJUST || (gen->mars && gen->mars->main->cycles > MAX_NO_ADJUST)) {
 			uint32_t deduction = mclks - ADJUST_BUFFER;
+			/* RetroPlug: the rebase is the one place the 32-bit cycle count is re-based, so the 64-bit base moves
+			 * with it and cycle_base + cycles stays the absolute master clock. */
+			gen->cycle_base += deduction;
+			/* RetroPlug: and the stop moves with it too. A stop_cycle that stayed put would make one run span the
+			 * whole rebased window (about 4e9 clocks, 80 s of emulation) inside a single block, because the sync
+			 * above would not fire until the 32-bit count caught up with a target that is now 80 s away. */
+			if (gen->stop_cycle) {
+				gen->stop_cycle = gen->stop_cycle > deduction ? gen->stop_cycle - deduction : 0;
+			}
 			vdp_adjust_cycles(v_context, deduction);
 			io_adjust_cycles(gen->io.ports, context->cycles, deduction);
 			io_adjust_cycles(gen->io.ports+1, context->cycles, deduction);
@@ -656,7 +671,9 @@ static m68k_context *sync_components(m68k_context * context, uint32_t address)
 		gen->last_flush_cycle = mclks;
 	}
 	gen->frame_end = vdp_cycles_to_frame_end(v_context);
-	context->sync_cycle = gen->frame_end;
+	/* RetroPlug: the block's end is the next sync when it is sooner than the frame's, which is what makes the stop
+	 * above reachable at all (a sync only happens once cycles >= sync_cycle). */
+	context->sync_cycle = gen->stop_cycle && gen->stop_cycle < gen->frame_end ? gen->stop_cycle : gen->frame_end;
 	//printf("Set sync cycle to: %d @ %d, vcounter: %d, hslot: %d\n", context->sync_cycle, context->cycles, v_context->vcounter, v_context->hslot);
 	if (!address && (gen->header.enter_debugger || gen->header.save_state)) {
 		context->sync_cycle = context->cycles + 1;
